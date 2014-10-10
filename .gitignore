@@ -1,0 +1,12 @@
+# Logs
+logs
+*.log
+
+# Grunt storage
+.grunt
+
+# Dependencies
+node_modules
+
+# WebStorm project folder
+.idea
