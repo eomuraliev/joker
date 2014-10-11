@@ -5,6 +5,7 @@ function initWatchVal() {}
 
 function Scope() {
   this.$$watchers = [];
+  this.$$lastDirtyWatch = null;
 }
 
 Scope.prototype.$watch = function(watchFn, listenerFn) {
@@ -15,6 +16,7 @@ Scope.prototype.$watch = function(watchFn, listenerFn) {
     last: initWatchVal
   };
   this.$$watchers.push(watcher);
+  this.$$lastDirtyWatch = null; // so that watches added in the middle of a digest are not ignored
 };
 
 Scope.prototype.$$digestOnce = function() {
@@ -28,11 +30,16 @@ Scope.prototype.$$digestOnce = function() {
     newValue = watcher.watchFn(self);
     oldValue = watcher.last;
     if (newValue !== oldValue) {
+      self.$$lastDirtyWatch = watcher;
       watcher.last = newValue;
       watcher.listenerFn(newValue,
         (oldValue !== initWatchVal? oldValue : newValue),
         self);
       dirty = true;
+    }
+    // if the watcher is clean, and it's the last watch we saw that was dirty stop the digest
+    else if (watcher === self.$$lastDirtyWatch) {
+      return false; //this will break lodash out of the _.each loop
     }
   });
 
@@ -42,6 +49,7 @@ Scope.prototype.$$digestOnce = function() {
 Scope.prototype.$digest = function() {
   var ttl = 10,
       dirty;
+  this.$$lastDirtyWatch = null;
   do {
     dirty = this.$$digestOnce();
     if (dirty && !(ttl--)) {
