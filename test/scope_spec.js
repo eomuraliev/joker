@@ -434,4 +434,83 @@ describe('digest', function() {
     scope.$digest();
     expect(scope.watchedValue).toBe('some other value');
   });
+
+  it('catches exceptions in watch functions and continues', function() {
+    scope.value = 'abc';
+    scope.counter = 0;
+
+    scope.$watch(
+      function(scope) {
+        throw 'error';
+      },
+      function(newValue, oldValue, scope) { }
+    );
+
+    scope.$watch(
+      function(scope) { return scope.value; },
+      function(newValue, oldValue, scope) {
+        scope.counter++;
+      }
+    );
+
+    scope.$digest();
+    expect(scope.counter).toBe(1);
+  });
+
+  it('catches exceptions in watch functions and continues', function() {
+    scope.value = 'abc';
+    scope.counter = 0;
+
+    scope.$watch(
+      function(scope) {
+        return scope.value;
+      },
+      function(newValue, oldValue, scope) {
+        throw 'error';
+      }
+    );
+
+    scope.$watch(
+      function(scope) { return scope.value; },
+      function(newValue, oldValue, scope) {
+        scope.counter++;
+      }
+    );
+
+    scope.$digest();
+    expect(scope.counter).toBe(1);
+  });
+
+  it("catches exceptions in $evalAsync", function(done) {
+    scope.aValue = 'abc';
+    scope.counter = 0;
+    scope.$watch(
+      function(scope) { return scope.aValue; },
+      function(newValue, oldValue, scope) {
+        scope.counter++;
+      }
+    );
+    scope.$evalAsync(function(scope) {
+      throw "Error";
+    });
+
+    setTimeout(function() {
+      expect(scope.counter).toBe(1);
+      done();
+    }, 50);
+  });
+
+  it("catches exceptions in $$postDigest", function() {
+    var didRun = false;
+    scope.$$postDigest(function() {
+        throw "Error";
+    });
+    scope.$$postDigest(function() {
+      didRun = true;
+    });
+
+    scope.$digest();
+    expect(didRun).toBe(true);
+  });
+
 });
