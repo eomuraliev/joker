@@ -7,6 +7,8 @@ function Scope() {
   this.$$watchers = [];
   this.$$lastDirtyWatch = null;
   this.$$asyncQueue = [];
+  this.$$postDigestQueue = [];
+  this.$$phase = null;
 }
 
 Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
@@ -53,6 +55,7 @@ Scope.prototype.$digest = function() {
       dirty,
       asyncTask;
   this.$$lastDirtyWatch = null;
+  this.beginPhase('$digest');
   do {
     while (this.$$asyncQueue.length) {
       asyncTask = this.$$asyncQueue.shift();
@@ -63,7 +66,11 @@ Scope.prototype.$digest = function() {
       throw "10 iterations of digests reached";
     }
   } while(dirty || this.$$asyncQueue.length);
+  this.clearPhase();
 
+  while (this.$$postDigestQueue.length) {
+    this.$$postDigestQueue.shift()();
+  }
 };
 
 
@@ -84,13 +91,39 @@ Scope.prototype.$eval = function(expr, locals) {
 
 Scope.prototype.$apply = function(expr) {
   try {
+    this.beginPhase('$apply');
     return this.$eval(expr);
   }
   finally {
+    this.clearPhase();
     this.$digest();
   }
 };
 
 Scope.prototype.$evalAsync = function(expr) {
+  var self = this;
+  if (!self.$$phase && !self.$$asyncQueue.length) {
+    //if we are not in a phase and there are no async tasks in queue, schedule a $digest
+    setTimeout(function() {
+      if (self.$$asyncQueue.length) {
+        self.$digest();
+      }
+    }, 0);
+  }
   this.$$asyncQueue.push({scope: this, expression: expr});
+};
+
+Scope.prototype.beginPhase = function(phase) {
+  if (this.$$phase) {
+    throw this.$$phase + ' already in progress';
+  }
+  this.$$phase = phase;
+};
+
+Scope.prototype.clearPhase = function() {
+  this.$$phase = null;
+};
+
+Scope.prototype.$$postDigest = function(expr) {
+  this.$$postDigestQueue.push(expr);
 };
