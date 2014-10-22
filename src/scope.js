@@ -12,6 +12,7 @@ function Scope() {
 }
 
 Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
+  var self = this;
   var watcher = {
     watchFn: watchFn,
     //TODO: find out if checking if listenerFn exists during $digest is better than calling no op
@@ -19,8 +20,15 @@ Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
     last: initWatchVal,
     valueEq: !!valueEq
   };
-  this.$$watchers.push(watcher);
+  this.$$watchers.unshift(watcher);
   this.$$lastDirtyWatch = null; // so that watches added in the middle of a digest are not ignored
+  return function() {
+    var index = self.$$watchers.indexOf(watcher);
+    if (index >= 0) {
+      self.$$watchers.splice(index, 1);
+      self.$$lastDirtyWatch = null;
+    }
+  };
 };
 
 Scope.prototype.$$digestOnce = function() {
@@ -30,21 +38,23 @@ Scope.prototype.$$digestOnce = function() {
       oldValue,
       newValue;
 
-  _.each(this.$$watchers, function(watcher) {
+  _.forEachRight(this.$$watchers, function(watcher) {
     try {
-      newValue = watcher.watchFn(self);
-      oldValue = watcher.last;
-      if (!self.$$areEqual(newValue, oldValue, watcher.valueEq)) {
-        self.$$lastDirtyWatch = watcher;
-        watcher.last = ( watcher.valueEq ? _.cloneDeep(newValue) : newValue );
-        watcher.listenerFn(newValue,
-          (oldValue !== initWatchVal ? oldValue : newValue),
-          self);
-        dirty = true;
-      }
-      // if the watcher is clean, and it's the last watch we saw that was dirty stop the digest
-      else if (watcher === self.$$lastDirtyWatch) {
-        return false; //this will break lodash out of the _.each loop
+      if( watcher) {
+        newValue = watcher.watchFn(self);
+        oldValue = watcher.last;
+        if (!self.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+          self.$$lastDirtyWatch = watcher;
+          watcher.last = ( watcher.valueEq ? _.cloneDeep(newValue) : newValue );
+          watcher.listenerFn(newValue,
+            (oldValue !== initWatchVal ? oldValue : newValue),
+            self);
+          dirty = true;
+        }
+        // if the watcher is clean, and it's the last watch we saw that was dirty stop the digest
+        else if (watcher === self.$$lastDirtyWatch) {
+          return false; //this will break lodash out of the _.each loop
+        }
       }
     }
     catch(e) {
