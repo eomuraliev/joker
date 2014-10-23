@@ -152,3 +152,55 @@ Scope.prototype.clearPhase = function() {
 Scope.prototype.$$postDigest = function(expr) {
   this.$$postDigestQueue.push(expr);
 };
+
+Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
+  var self = this,
+      newValues = new Array(watchFns.length),
+      oldValues = new Array(watchFns.length),
+      listenerScheduled = false,
+      firstRun = true,
+      watchRemovers = new Array(watchFns.length),
+      skipListenerExecution = false;
+
+  function watchGroupListener() {
+    if (skipListenerExecution) {
+      return;
+    }
+    if (firstRun) {
+      firstRun = false;
+      listenerFn(newValues, newValues, self);
+    }
+    else {
+      listenerFn(newValues, oldValues, self);
+    }
+    listenerScheduled = false;
+  }
+
+  function removeAllWatches() {
+    if (watchRemovers.length === 0) {
+      // we have a zero watch listenere scheduled. let's have it noop
+      skipListenerExecution = true;
+    }
+    for (var i=0; i < watchRemovers.length; i++) {
+      watchRemovers[i]();
+    }
+  }
+  if (watchFns.length === 0) {
+    listenerScheduled = true;
+    self.$evalAsync(watchGroupListener);
+  }
+
+  _.forEach(watchFns, function(watchFn, i) {
+    var watchRemover = self.$watch(watchFn, function(newValue, oldValue) {
+      newValues[i] = newValue;
+      oldValues[i] = oldValue;
+      if(listenerScheduled === false) {
+        listenerScheduled = true;
+        self.$evalAsync(watchGroupListener);
+      }
+    });
+    watchRemovers[i] = watchRemover;
+  });
+
+  return removeAllWatches;
+};
