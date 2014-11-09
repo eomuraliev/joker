@@ -263,10 +263,33 @@ Scope.prototype.$watchCollection = function(watchFn, listenerFn) {
 
   var internalWatchFn = function(scope) {
     newValue = watchFn(scope);
-    if (!self.$$areEqual(newValue, oldValue, false)) {
-      changeCount++;
+    if (_.isObject(newValue)) {
+      if(_.isArray(newValue)) {
+        if(!_.isArray(oldValue)) {
+          changeCount++;
+          oldValue = [];
+        }
+        if(newValue.length !== oldValue.length) {
+          changeCount++;
+          oldValue.length = newValue.length;
+        }
+        _.forEach(newValue, function(newItem, i) {
+          if (!self.$$areEqual(newItem, oldValue[i], false)) {
+            changeCount++;
+            oldValue[i] = newItem;
+          }
+        });
+      }
+      else {
+
+      }
     }
-    oldValue = newValue;
+    else {
+      if (!self.$$areEqual(newValue, oldValue, false)) {
+        changeCount++;
+      }
+      oldValue = newValue;
+    }
 
     return changeCount;
   };
