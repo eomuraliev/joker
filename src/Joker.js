@@ -6,6 +6,9 @@ _.mixin({
     if(obj === null || obj === undefined) {
       return false;
     }
-    return _.isNumber(obj.length);
+    //TODO: Rewrite this. It is horrible.
+    var length = obj.length;
+    return length === 0 ||
+      (_.isNumber(length) && length > 0 && (length - 1) in obj);
   }
 });
