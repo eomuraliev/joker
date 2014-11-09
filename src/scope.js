@@ -8,6 +8,8 @@ function Scope() {
   this.$$lastDirtyWatch = null;
   this.$$asyncQueue = [];
   this.$$postDigestQueue = [];
+  this.$$root = this;
+  this.$$children = [];
   this.$$phase = null;
 }
 
@@ -21,12 +23,12 @@ Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
     valueEq: !!valueEq
   };
   this.$$watchers.unshift(watcher);
-  this.$$lastDirtyWatch = null; // so that watches added in the middle of a digest are not ignored
+  this.$$root.$$lastDirtyWatch = null; // so that watches added in the middle of a digest are not ignored
   return function() {
     var index = self.$$watchers.indexOf(watcher);
     if (index >= 0) {
       self.$$watchers.splice(index, 1);
-      self.$$lastDirtyWatch = null;
+      self.$$root.$$lastDirtyWatch = null;
     }
   };
 };
@@ -34,32 +36,38 @@ Scope.prototype.$watch = function(watchFn, listenerFn, valueEq) {
 Scope.prototype.$$digestOnce = function() {
 // TODO: use a normal for loop here instead of lodash
   var self = this,
-      dirty = false,
-      oldValue,
-      newValue;
+      dirty = false;
 
-  _.forEachRight(this.$$watchers, function(watcher) {
-    try {
-      if( watcher) {
-        newValue = watcher.watchFn(self);
-        oldValue = watcher.last;
-        if (!self.$$areEqual(newValue, oldValue, watcher.valueEq)) {
-          self.$$lastDirtyWatch = watcher;
-          watcher.last = ( watcher.valueEq ? _.cloneDeep(newValue) : newValue );
-          watcher.listenerFn(newValue,
-            (oldValue !== initWatchVal ? oldValue : newValue),
-            self);
-          dirty = true;
-        }
-        // if the watcher is clean, and it's the last watch we saw that was dirty stop the digest
-        else if (watcher === self.$$lastDirtyWatch) {
-          return false; //this will break lodash out of the _.each loop
+  this.$$everyScope(function(scope) {
+    var oldValue,
+        newValue,
+        continueLoop = true;
+
+    _.forEachRight(scope.$$watchers, function(watcher) {
+      try {
+        if( watcher) {
+          newValue = watcher.watchFn(scope);
+          oldValue = watcher.last;
+          if (!scope.$$areEqual(newValue, oldValue, watcher.valueEq)) {
+            self.$$root.$$lastDirtyWatch = watcher;
+            watcher.last = ( watcher.valueEq ? _.cloneDeep(newValue) : newValue );
+            watcher.listenerFn(newValue,
+              (oldValue !== initWatchVal ? oldValue : newValue),
+              scope);
+            dirty = true;
+          }
+          // if the watcher is clean, and it's the last watch we saw that was dirty stop the digest
+          else if (watcher === self.$$root.$$lastDirtyWatch) {
+            continueLoop = false;
+            return false; //this will break lodash out of the _.each loop
+          }
         }
       }
-    }
-    catch(e) {
-      console.error(e);
-    }
+      catch(e) {
+        console.error(e);
+      }
+    });
+    return continueLoop;
   });
 
   return dirty;
@@ -69,7 +77,7 @@ Scope.prototype.$digest = function() {
   var ttl = 10,
       dirty,
       asyncTask;
-  this.$$lastDirtyWatch = null;
+  this.$$root.$$lastDirtyWatch = null;
   this.beginPhase('$digest');
   do {
     while (this.$$asyncQueue.length) {
@@ -121,7 +129,7 @@ Scope.prototype.$apply = function(expr) {
   }
   finally {
     this.clearPhase();
-    this.$digest();
+    this.$$root.$digest();
   }
 };
 
@@ -131,7 +139,7 @@ Scope.prototype.$evalAsync = function(expr) {
     //if we are not in a phase and there are no async tasks in queue, schedule a $digest
     setTimeout(function() {
       if (self.$$asyncQueue.length) {
-        self.$digest();
+        self.$$root.$digest();
       }
     }, 0);
   }
@@ -203,4 +211,46 @@ Scope.prototype.$watchGroup = function(watchFns, listenerFn) {
   });
 
   return removeAllWatches;
+};
+
+Scope.prototype.$new = function(isolated) {
+  var child,
+      ChildScope = function() {};
+  if (isolated) {
+    child = new Scope();
+    child.$$root = this.$$root;
+    child.$$asyncQueue = this.$$root.$$asyncQueue;
+    child.$$postDigestQueue = this.$$root.$$postDigestQueue;
+  }
+  else {
+    ChildScope.prototype = this;
+    child = new ChildScope();
+  }
+  this.$$children.push(child);
+  child.$parent = this;
+  child.$$watchers = [];
+  child.$$children = [];
+  return child;
+};
+
+Scope.prototype.$$everyScope = function(fn) {
+  if (fn(this)) {
+    return this.$$children.every(function(child) {
+      return child.$$everyScope(fn);
+    });
+  }
+  else {
+    return false;
+  }
+};
+
+Scope.prototype.$destroy = function() {
+  if (this.$$root === this) {
+    return;
+  }
+  var siblings = this.$parent.$$children;
+  var indexOfThis = siblings.indexOf(this);
+  if (indexOfThis >= 0) {
+    siblings.splice(indexOfThis, 1);
+  }
 };
