@@ -13,7 +13,13 @@ function setupModuleLoader(window) {
     }
     var moduleInstance = {
       name: name,
-      requires: requires
+      requires: requires,
+      //TODO: constant should be a prototype property
+      constant: function(key, value) {
+        //TODO: should use `this` instead of referencing `moduleInstance`
+        moduleInstance._invokeQueue.push(['constant', [key, value]]);
+      },
+      _invokeQueue: []
     };
     modules[name] = moduleInstance;
     return moduleInstance;
