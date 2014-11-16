@@ -34,4 +34,12 @@ describe('injector', function() {
       createInjector(['myModule']);
     }).toThrow();
   });
+
+  it('can return a registered constant', function() {
+    var module = angular.module('myModule', []);
+    module.constant('A', 42);
+    var injector = createInjector([module.name]);
+    expect(injector.get('A')).toBe(42);
+  });
+
 });
